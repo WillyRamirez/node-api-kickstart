@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres
+    restart: always
+    env_file: .env
+    ports:
+      - ${POSTGRES_PORT}:${POSTGRES_PORT}
+    volumes:
+      - database-data:/var/lib/postgresql/data/ # persist data even if container shuts down
+  app:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    command: nodemon app/index.js
+    image: node-api-postgres
+    env_file: .env
+    ports:
+      - $NODE_PORT:$EXPOSED_NODE_PORT
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASS: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./:/usr/src/api
+      - usr/src/api/node_modules
+    depends_on:
+      - postgres
+    links:
+      - postgres
+    stdin_open: true
+    tty: true
+
+volumes:
+  database-data:
