@@ -13,6 +13,8 @@ app.get('/', (request, response) => {
 });
 
 app.post('/login', db.login)
+app.post('/logout', db.logout)
+app.post('/token', auth.isAuth, db.generateNewAccessToken)
 app.get('/users', auth.isAuth, auth.isAdmin, db.getUsers)
 app.get('/users/:id', auth.isAuth, db.getUserById)
 app.post('/users', db.createUser)

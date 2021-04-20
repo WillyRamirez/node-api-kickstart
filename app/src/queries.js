@@ -10,6 +10,8 @@ const pool = new Pool({
 });
 
 const accessTokenSecret = process.env.ACCESS_TOKEN_SECRET;
+const refreshTokenSecret = process.env.REFRESH_TOKEN_SECRET;
+let refreshTokens = [];
 
 const login = (request, response) => {
   const { email, password } = request.body;
@@ -17,13 +19,16 @@ const login = (request, response) => {
     [email, password],
     (error, results) => {
     if (error) {
-      console.log(error);
       throw error
     }
 
     if (results?.rows.length > 0) {
-      const accessToken = jwt.sign({ id: results.rows[0].id, email: results.rows[0].email }, accessTokenSecret);
-      response.status(200).json({ accessToken: accessToken, user: results.rows });
+      const userData = { id: results.rows[0].id, email: results.rows[0].email };
+      const accessToken = jwt.sign(userData, accessTokenSecret, {expiresIn: "1 hour"});
+      const refreshToken = jwt.sign(userData, refreshTokenSecret, {expiresIn: "90 days"})
+
+      refreshTokens.push(refreshToken);
+      response.status(200).json({ accessToken, refreshToken, user: results.rows });
     } else {
       response.status(401).json({error: "unauthorized"});
     }
@@ -108,8 +113,42 @@ const deleteUser = (request, response) => {
   })
 };
 
+const generateNewAccessToken = (request, response) => {
+  const { token } = request.body;
+
+  if (!token) {
+    return response.sendStatus(401);
+  }
+
+  if (!refreshTokens.includes(token)) {
+    return response.sendStatus(403);
+  }
+
+  jwt.verify(token, refreshTokenSecret, (err, user) => {
+    if (err) {
+      return response.sendStatus(403);
+    }
+
+    const userData = { id: user.id, email: user.email };
+    const accessToken = jwt.sign(userData, accessTokenSecret, {expiresIn: "1 hour"});
+
+    response.json({
+      accessToken
+    });
+  });
+}
+
+const logout = (request, response) => {
+  const { refresh_token } = request.body;
+  refreshTokens = refreshTokens.filter(token => refresh_token !== token);
+
+  response.send("Logout successful");
+};
+
 module.exports = {
   login,
+  logout,
+  generateNewAccessToken,
   isAdmin,
   getUsers,
   getUserById,
