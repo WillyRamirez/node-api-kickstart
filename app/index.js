@@ -1,25 +1,26 @@
 const express = require('express');
-const bodyParser = require('body-parser');
-const app = express();
-const port = 8080;
 const db = require('./src/queries')
+const auth = require('./src/authenticateJWT');
+const port = 8080;
 
-app.use(bodyParser.json());
-app.use(
-  bodyParser.urlencoded({
-    extended: true,
-  })
-);
+const app = express();
+
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
 app.get('/', (request, response) => {
-  response.json({ info: 'Node.js, Express, and Postgres API 8' })
+  response.json({ info: 'Node.js, Express, and Postgres API' })
 });
 
-app.get('/users', db.getUsers)
-app.get('/users/:id', db.getUserById)
+app.post('/login', db.login)
+app.post('/logout', db.logout)
+app.post('/token', auth.isAuth, db.generateNewAccessToken)
+app.get('/users', auth.isAuth, auth.isAdmin, db.getUsers)
+app.get('/users/:id', auth.isAuth, db.getUserById)
 app.post('/users', db.createUser)
-app.put('/users/:id', db.updateUser)
-app.delete('/users/:id', db.deleteUser)
+
+app.put('/users/:id', auth.isAuth, db.updateUser)
+app.delete('/users/:id', auth.isAuth, auth.isAdmin, db.deleteUser)
 
 app.listen(port, () => {
   console.log(`App running on port ${port}.`)
