@@ -11,7 +11,7 @@ const pool = new Pool({
 
 const accessTokenSecret = process.env.ACCESS_TOKEN_SECRET;
 const refreshTokenSecret = process.env.REFRESH_TOKEN_SECRET;
-let refreshTokens = [];
+let refreshTokenBlacklist = [];
 
 const login = (request, response) => {
   const { email, password } = request.body;
@@ -24,10 +24,9 @@ const login = (request, response) => {
 
     if (results?.rows.length > 0) {
       const userData = { id: results.rows[0].id, email: results.rows[0].email };
-      const accessToken = jwt.sign(userData, accessTokenSecret, {expiresIn: "1 hour"});
+      const accessToken = jwt.sign(userData, accessTokenSecret, {expiresIn: "15 minutes"});
       const refreshToken = jwt.sign(userData, refreshTokenSecret, {expiresIn: "90 days"})
 
-      refreshTokens.push(refreshToken);
       response.status(200).json({ accessToken, refreshToken, user: results.rows });
     } else {
       response.status(401).json({error: "unauthorized"});
@@ -65,25 +64,40 @@ const getUsers = (request, response) => {
 };
 
 const getUserById = (request, response) => {
-  const id = parseInt(request.params.id)
+  const { id } = request.params;
 
-  pool.query('SELECT first_name, last_name, username, is_admin, email FROM users WHERE id = $1', [id], (error, results) => {
+  pool.query('SELECT first_name, last_name, username, email FROM users WHERE id = $1', [id], (error, results) => {
     if (error) {
       throw error
     }
+
     response.status(200).json(results.rows)
   })
 };
 
 const createUser = (request, response) => {
-  const { first_name, last_name, username, email } = request.body
+  const { first_name, last_name, username, email, password } = request.body
 
-  pool.query('INSERT INTO users (first_name, last_name, username, email) VALUES ($1, $2, $3, $4)', [first_name, last_name, username, email], (error, results) => {
-    if (error) {
-      throw error
-    }
-    response.status(201).send(`User added with ID: ${results.insertId}`)
-  })
+  pool.query('INSERT INTO users (first_name, last_name, username, email, password) VALUES ($1, $2, $3, $4, crypt($5, gen_salt(\'bf\'))) RETURNING id',
+    [first_name, last_name, username, email, password],
+    (error, results) => {
+      if (error) {
+        throw error
+      }
+
+      if (results.rows.length > 0) {
+        pool.query('SELECT first_name, last_name, username, email FROM users WHERE id = $1', [results.rows[0].id], (error, results) => {
+          if (error) {
+            throw error
+          }
+          const userData = { id: results.rows[0].id, email: results.rows[0].email };
+          const accessToken = jwt.sign(userData, accessTokenSecret, {expiresIn: "15 minutes"});
+          const refreshToken = jwt.sign(userData, refreshTokenSecret, {expiresIn: "90 days"})
+
+          response.status(200).json({ accessToken, refreshToken, user: results.rows[0] });
+        })
+      }
+    })
 };
 
 const updateUser = (request, response) => {
@@ -97,6 +111,7 @@ const updateUser = (request, response) => {
       if (error) {
         throw error
       }
+
       response.status(200).send(`User modified with ID: ${id}`)
     }
   )
@@ -120,7 +135,7 @@ const generateNewAccessToken = (request, response) => {
     return response.sendStatus(401);
   }
 
-  if (!refreshTokens.includes(token)) {
+  if (refreshTokenBlacklist.includes(token)) {
     return response.sendStatus(403);
   }
 
@@ -130,7 +145,7 @@ const generateNewAccessToken = (request, response) => {
     }
 
     const userData = { id: user.id, email: user.email };
-    const accessToken = jwt.sign(userData, accessTokenSecret, {expiresIn: "1 hour"});
+    const accessToken = jwt.sign(userData, accessTokenSecret, {expiresIn: "15 minutes"});
 
     response.json({
       accessToken
@@ -139,8 +154,8 @@ const generateNewAccessToken = (request, response) => {
 }
 
 const logout = (request, response) => {
-  const { refresh_token } = request.body;
-  refreshTokens = refreshTokens.filter(token => refresh_token !== token);
+  const { refreshToken } = request.body;
+  refreshTokenBlacklist.push(refreshToken);
 
   response.send("Logout successful");
 };

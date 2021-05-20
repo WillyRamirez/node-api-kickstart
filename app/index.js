@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('./src/queries')
-const auth = require('./src/authenticateJWT');
+const auth = require('./src/middleware');
 const port = 8080;
 
 const app = express();
@@ -13,8 +13,8 @@ app.get('/', (request, response) => {
 });
 
 app.post('/login', db.login)
-app.post('/logout', db.logout)
-app.post('/token', auth.isAuth, db.generateNewAccessToken)
+app.post('/logout', auth.isAuth, db.logout)
+app.post('/token', db.generateNewAccessToken)
 app.get('/users', auth.isAuth, auth.isAdmin, db.getUsers)
 app.get('/users/:id', auth.isAuth, db.getUserById)
 app.post('/users', db.createUser)
