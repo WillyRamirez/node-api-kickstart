@@ -1,4 +1,7 @@
 const jwt = require('jsonwebtoken');
+const { validationResult } = require('express-validator');
+const getValidationRules = require('./Validations');
+
 const Pool = require('pg').Pool;
 
 const pool = new Pool({
@@ -13,7 +16,16 @@ const accessTokenSecret = process.env.ACCESS_TOKEN_SECRET;
 const refreshTokenSecret = process.env.REFRESH_TOKEN_SECRET;
 let refreshTokenBlacklist = [];
 
-const login = (request, response) => {
+const login = async(request, response) => {
+  const validations = getValidationRules(alreadyExists).login;
+  await Promise.all(validations.map(validation => validation.run(request)));
+
+  const errors = validationResult(request);
+
+  if (!errors.isEmpty()) {
+    return response.status(400).json({ errors: errors.array() });
+  }
+
   const { email, password } = request.body;
   pool.query('SELECT ID, first_name, last_name, username, email FROM users WHERE email = $1 AND PASSWORD = crypt($2, password)',
     [email, password],
@@ -54,6 +66,16 @@ const isAdmin = (req, res, next, userId) => {
   })
 }
 
+const alreadyExists = (key, value) => {
+  pool.query('SELECT $1 FROM users WHERE $1 = $2', [key, value], (error, results) => {
+    if (error) {
+      throw error
+    }
+
+    return results.rows.length > 0;
+  });
+};
+
 const getUsers = (request, response) => {
   pool.query('SELECT id, first_name, last_name, username, email FROM users ORDER BY id ASC', (error, results) => {
     if (error) {
@@ -75,7 +97,16 @@ const getUserById = (request, response) => {
   })
 };
 
-const createUser = (request, response) => {
+const createUser = async (request, response) => {
+  const validations = getValidationRules(alreadyExists).user;
+  await Promise.all(validations.map(validation => validation.run(request)));
+
+  const errors = validationResult(request);
+
+  if (!errors.isEmpty()) {
+    return response.status(400).json({ errors: errors.array() });
+  }
+
   const { first_name, last_name, username, email, password } = request.body
 
   pool.query('INSERT INTO users (first_name, last_name, username, email, password) VALUES ($1, $2, $3, $4, crypt($5, gen_salt(\'bf\'))) RETURNING id',
@@ -165,6 +196,7 @@ module.exports = {
   logout,
   generateNewAccessToken,
   isAdmin,
+  alreadyExists,
   getUsers,
   getUserById,
   createUser,
