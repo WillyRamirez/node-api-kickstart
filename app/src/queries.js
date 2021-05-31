@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
 const getValidationRules = require('./Validations');
+const errHelper = require('./ErrorHelper');
 
 const Pool = require('pg').Pool;
 
@@ -23,7 +24,7 @@ const login = async(request, response) => {
   const errors = validationResult(request);
 
   if (!errors.isEmpty()) {
-    return response.status(400).json({ errors: errors.array() });
+    return response.status(400).json({ errors: errHelper.formatValidationErrors(errors.array()) });
   }
 
   const { email, password } = request.body;
@@ -41,7 +42,7 @@ const login = async(request, response) => {
 
       response.status(200).json({ accessToken, refreshToken, user: results.rows });
     } else {
-      response.status(401).json({error: "unauthorized"});
+      response.status(401).json({ errors: [{ msg: 'Wrong username or password' }] });
     }
   })
 };
@@ -67,12 +68,18 @@ const isAdmin = (req, res, next, userId) => {
 }
 
 const alreadyExists = (key, value) => {
-  pool.query('SELECT $1 FROM users WHERE $1 = $2', [key, value], (error, results) => {
-    if (error) {
-      throw error
-    }
+  return new Promise((resolve, reject) => {
+    pool.query('select exists(select 1 from users where ' + key + ' = $1)', [value.toLowerCase()], (error, results) => {
+      if (error) {
+        return reject( `500: ${error}`);
+      }
 
-    return results.rows.length > 0;
+      if (results.rows[0].exists) {
+        return reject(`${key} already in use`);
+      }
+
+      return resolve();
+    });
   });
 };
 
@@ -97,11 +104,12 @@ const getUserById = (request, response) => {
   })
 };
 
-const createUser = async (request, response) => {
+const createUser = async (request, response, next) => {
+
   const validations = getValidationRules(alreadyExists).user;
   await Promise.all(validations.map(validation => validation.run(request)));
-
   const errors = validationResult(request);
+  console.log('validationResult: ', errors);
 
   if (!errors.isEmpty()) {
     return response.status(400).json({ errors: errors.array() });
