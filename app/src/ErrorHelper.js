@@ -1,6 +1,4 @@
 const formatValidationErrors = (errors) => {
-  console.log('errors: ', errors);
-
   let formattedErrors = [];
   errors.forEach(e => {
     formattedErrors.push({
@@ -14,33 +12,17 @@ const formatValidationErrors = (errors) => {
   return formattedErrors;
 }
 
-// errors: [
-//   {
-//     value: 'admin',
-//     msg: 'username already in use',
-//     param: 'username',
-//     location: 'body'
-//   },
-//   {
-//     value: 'test@test.com',
-//     msg: 'email already in use',
-//     param: 'email',
-//     location: 'body'
-//   }
-// ]
-// }
+const formatError = (e) => {
+  let formattedErrors = {
+    type: "/errors/request-failed",
+    msg: e.msg,
+    param: e.param,
+  };
 
-/*
-errors: [
-  {
-    "type": "/errors/incorrect-user-pass",
-    "msg": "Incorrect username or password.",
-    "status": 401,
-    "param": "password",
-    "value": "admin",
-  }
-]
- */
+  return formattedErrors;
+}
+
 module.exports = {
   formatValidationErrors,
+  formatError,
 };

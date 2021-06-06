@@ -42,7 +42,7 @@ const login = async(request, response) => {
 
       response.status(200).json({ accessToken, refreshToken, user: results.rows });
     } else {
-      response.status(401).json({ errors: [{ msg: 'Wrong username or password' }] });
+      response.status(401).json({ errors: errHelper.formatError({ param: 'loginForm', msg: 'Wrong username or password' }) });
     }
   })
 };
@@ -109,10 +109,9 @@ const createUser = async (request, response, next) => {
   const validations = getValidationRules(alreadyExists).user;
   await Promise.all(validations.map(validation => validation.run(request)));
   const errors = validationResult(request);
-  console.log('validationResult: ', errors);
 
   if (!errors.isEmpty()) {
-    return response.status(400).json({ errors: errors.array() });
+    return response.status(400).json({ errors: errHelper.formatValidationErrors(errors.array()) });
   }
 
   const { first_name, last_name, username, email, password } = request.body
@@ -135,6 +134,8 @@ const createUser = async (request, response, next) => {
 
           response.status(200).json({ accessToken, refreshToken, user: results.rows[0] });
         })
+      } else {
+          response.status(401).json({ errors: errHelper.formatError({ param: 'signUpForm', msg: 'Something went wrong creating your account' }) });
       }
     })
 };
