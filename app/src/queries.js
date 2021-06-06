@@ -1,4 +1,8 @@
 const jwt = require('jsonwebtoken');
+const { validationResult } = require('express-validator');
+const getValidationRules = require('./Validations');
+const errHelper = require('./ErrorHelper');
+
 const Pool = require('pg').Pool;
 
 const pool = new Pool({
@@ -13,7 +17,16 @@ const accessTokenSecret = process.env.ACCESS_TOKEN_SECRET;
 const refreshTokenSecret = process.env.REFRESH_TOKEN_SECRET;
 let refreshTokenBlacklist = [];
 
-const login = (request, response) => {
+const login = async(request, response) => {
+  const validations = getValidationRules(alreadyExists).login;
+  await Promise.all(validations.map(validation => validation.run(request)));
+
+  const errors = validationResult(request);
+
+  if (!errors.isEmpty()) {
+    return response.status(400).json({ errors: errHelper.formatValidationErrors(errors.array()) });
+  }
+
   const { email, password } = request.body;
   pool.query('SELECT ID, first_name, last_name, username, email FROM users WHERE email = $1 AND PASSWORD = crypt($2, password)',
     [email, password],
@@ -29,7 +42,7 @@ const login = (request, response) => {
 
       response.status(200).json({ accessToken, refreshToken, user: results.rows });
     } else {
-      response.status(401).json({error: "unauthorized"});
+      response.status(401).json({ errors: errHelper.formatError({ param: 'loginForm', msg: 'Wrong username or password' }) });
     }
   })
 };
@@ -54,6 +67,22 @@ const isAdmin = (req, res, next, userId) => {
   })
 }
 
+const alreadyExists = (key, value) => {
+  return new Promise((resolve, reject) => {
+    pool.query('select exists(select 1 from users where ' + key + ' = $1)', [value.toLowerCase()], (error, results) => {
+      if (error) {
+        return reject( `500: ${error}`);
+      }
+
+      if (results.rows[0].exists) {
+        return reject(`${key} already in use`);
+      }
+
+      return resolve();
+    });
+  });
+};
+
 const getUsers = (request, response) => {
   pool.query('SELECT id, first_name, last_name, username, email FROM users ORDER BY id ASC', (error, results) => {
     if (error) {
@@ -75,7 +104,16 @@ const getUserById = (request, response) => {
   })
 };
 
-const createUser = (request, response) => {
+const createUser = async (request, response, next) => {
+
+  const validations = getValidationRules(alreadyExists).user;
+  await Promise.all(validations.map(validation => validation.run(request)));
+  const errors = validationResult(request);
+
+  if (!errors.isEmpty()) {
+    return response.status(400).json({ errors: errHelper.formatValidationErrors(errors.array()) });
+  }
+
   const { first_name, last_name, username, email, password } = request.body
 
   pool.query('INSERT INTO users (first_name, last_name, username, email, password) VALUES ($1, $2, $3, $4, crypt($5, gen_salt(\'bf\'))) RETURNING id',
@@ -96,6 +134,8 @@ const createUser = (request, response) => {
 
           response.status(200).json({ accessToken, refreshToken, user: results.rows[0] });
         })
+      } else {
+          response.status(401).json({ errors: errHelper.formatError({ param: 'signUpForm', msg: 'Something went wrong creating your account' }) });
       }
     })
 };
@@ -165,6 +205,7 @@ module.exports = {
   logout,
   generateNewAccessToken,
   isAdmin,
+  alreadyExists,
   getUsers,
   getUserById,
   createUser,
