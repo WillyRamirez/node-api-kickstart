@@ -27,7 +27,7 @@ services:
   app:
     build:
       context: .
-      dockerfile: app/Dockerfile
+      dockerfile: Dockerfile
     command: nodemon app/index.js
     image: node-api-postgres
     env_file: .env

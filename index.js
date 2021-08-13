@@ -18,6 +18,7 @@ app.post('/token', db.generateNewAccessToken)
 app.get('/users', auth.isAuth, auth.isAdmin, db.getUsers)
 app.get('/users/:id', auth.isAuth, db.getUserById)
 app.post('/users', db.createUser)
+app.post('/users/forgot', db.forgotPassword)
 
 app.put('/users/:id', auth.isAuth, db.updateUser)
 app.delete('/users/:id', auth.isAuth, auth.isAdmin, db.deleteUser)

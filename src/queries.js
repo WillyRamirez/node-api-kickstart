@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
 const getValidationRules = require('./Validations');
 const errHelper = require('./ErrorHelper');
-
+const emailCtrl = require('./emailController')
 const Pool = require('pg').Pool;
 
 const pool = new Pool({
@@ -15,6 +15,7 @@ const pool = new Pool({
 
 const accessTokenSecret = process.env.ACCESS_TOKEN_SECRET;
 const refreshTokenSecret = process.env.REFRESH_TOKEN_SECRET;
+const resetPasswordTokenSecret = process.env.RESET_PASSWORD_TOKEN_SECRET;
 let refreshTokenBlacklist = [];
 
 const login = async(request, response) => {
@@ -105,7 +106,6 @@ const getUserById = (request, response) => {
 };
 
 const createUser = async (request, response, next) => {
-
   const validations = getValidationRules(alreadyExists).user;
   await Promise.all(validations.map(validation => validation.run(request)));
   const errors = validationResult(request);
@@ -200,6 +200,23 @@ const logout = (request, response) => {
   response.send("Logout successful");
 };
 
+const forgotPassword = (request, response) => {
+  const { email } = request.body;
+  pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()], (error, results) => {
+    if (error) {
+      throw error
+    }
+
+    if (results.rows.length > 0) {
+      const userData = { id: results.rows[0].id, email: email };
+      const resetToken = jwt.sign(userData, resetPasswordTokenSecret, {expiresIn: "15 minutes"});
+      emailCtrl.sendChangePasswordEmail(email, resetToken);
+    } else {
+      response.status(200).send();
+    }
+  })
+}
+
 module.exports = {
   login,
   logout,
@@ -211,4 +228,5 @@ module.exports = {
   createUser,
   updateUser,
   deleteUser,
+  forgotPassword,
 };
